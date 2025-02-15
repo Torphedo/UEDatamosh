@@ -14,6 +14,11 @@ TAutoConsoleVariable<bool> CVarShaderOn(TEXT("r.DoDatamosh"),
 	TEXT("Toggles Datamoshing\n"),
 	ECVF_RenderThreadSafe);
 
+TAutoConsoleVariable<bool> CVarFreezeFrame(TEXT("r.DatamoshFreeze"),
+	false,
+	TEXT(""),
+	ECVF_RenderThreadSafe);
+
 
 FCustomSceneViewExtension::FCustomSceneViewExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {
 	UE_LOG(LogTemp, Log, TEXT("Datamosh Plugin: registered SceneViewExtension with renderer"));
@@ -49,16 +54,17 @@ FScreenPassTexture getTexture(FRDGBuilder& GraphBuilder, const FPostProcessMater
 
 FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& GraphBuilder, const FSceneView& SceneView, const FPostProcessMaterialInputs& Inputs)
 {
-	// SceneViewExtension gives SceneView, not ViewInfo so we need to setup some basics
-	const FSceneViewFamily& ViewFamily = *SceneView.Family;
-	const ERHIFeatureLevel::Type FeatureLevel = SceneView.GetFeatureLevel();
-	
 	const FScreenPassTexture& SceneColor = getTexture(GraphBuilder, Inputs, EPostProcessMaterialInput::SceneColor);
 	const FScreenPassTexture& Velocity = getTexture(GraphBuilder, Inputs, EPostProcessMaterialInput::Velocity);
 
-	if (!SceneColor.IsValid() || CVarShaderOn.GetValueOnRenderThread() == 0) {
+	// Cancel our custom pass based on the CVar
+	if (!SceneColor.IsValid() || !CVarShaderOn.GetValueOnRenderThread()) {
 		return SceneColor;
 	}
+	
+	// SceneViewExtension gives SceneView, not ViewInfo so we need to setup some basics
+	const FSceneViewFamily& ViewFamily = *SceneView.Family;
+	const ERHIFeatureLevel::Type FeatureLevel = SceneView.GetFeatureLevel();
 
 	// Here starts the RDG stuff
 	RDG_EVENT_SCOPE(GraphBuilder, "Custom Postprocess Effect");
@@ -66,12 +72,20 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// Access point for our Shaders
 		const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ViewFamily.GetFeatureLevel());
 
+		// Setup all the descriptors to create a target texture
+		FRDGTextureDesc OutputDesc;
+		{
+			OutputDesc = SceneColor.Texture->Desc;
+
+			OutputDesc.Reset();
+			OutputDesc.Flags |= TexCreate_UAV;
+			OutputDesc.Flags &= ~(TexCreate_RenderTargetable | TexCreate_FastVRAM);
+
+			OutputDesc.ClearValue = FClearValueBinding::Black;
+		}
+
 		// Set the shader parameters
 		FCustomShader::FParameters* PassParameters = GraphBuilder.AllocParameters<FCustomShader::FParameters>();
-
-		// Input is the SceneColor from PostProcess Material Inputs
-		PassParameters->OriginalSceneColor = SceneColor.Texture;
-		PassParameters->Velocity = Velocity.Texture;
 
 		// Get the input sizes (do note that viewport visible area might not be the full extent of the SceneColor texture
 		// https://docs.unrealengine.com/5.1/en-US/screen-percentage-with-temporal-upscale-in-unreal-engine/
@@ -90,25 +104,25 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		FCommonShaderParameters CommonParameters;
 		CommonParameters.ViewUniformBuffer = SceneView.ViewUniformBuffer;
 		PassParameters->CommonParameters = CommonParameters;
-
-		// Setup all the descriptors to create a target texture
-		FRDGTextureDesc OutputDesc;
-		{
-			OutputDesc = SceneColor.Texture->Desc;
-
-			OutputDesc.Reset();
-			OutputDesc.Flags |= TexCreate_UAV;
-			OutputDesc.Flags &= ~(TexCreate_RenderTargetable | TexCreate_FastVRAM);
-
-			const FLinearColor ClearColor(0., 0., 0., 0.);
-			OutputDesc.ClearValue = FClearValueBinding(ClearColor);
-		}
-
-		// Create target texture
-		const FRDGTextureRef OutputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Custom Effect Output Texture"));
-
+		
+		// Create target texture which will persist between frames.
+		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp.
+		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Custom Effect Output Texture"), ERDGTextureFlags::MultiFrame);
 		// Create UAV from Target Texture
-		PassParameters->Output = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(OutputTexture));
+		PassParameters->Output = GraphBuilder.CreateUAV(outputTexture);
+
+		// Copy current framebuffer to output
+		AddCopyTexturePass(GraphBuilder, SceneColor.Texture, outputTexture);
+		
+		if (CVarFreezeFrame.GetValueOnRenderThread() && historyBuffer != nullptr) {
+			// Use the output from last frame as if it was the current framebuffer
+			PassParameters->OriginalSceneColor = GraphBuilder.RegisterExternalTexture(historyBuffer);
+		} else {
+			PassParameters->OriginalSceneColor = SceneColor.Texture;
+		}
+		
+		PassParameters->Velocity = Velocity.Texture;
+
 
 		// Set Compute Shader and execute
 		const int32 kDefaultGroupSize = 8;
@@ -127,7 +141,10 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// Copy the output texture back to SceneColor
 		// Returning the new texture as ScreenPassTexture doesn't work, so this is pretty fast alternative
 		// Also with f.ex 'PrePostProcessPass_RenderThread' you get only input and something similar needs to be implemented then
-		AddCopyTexturePass(GraphBuilder, OutputTexture, SceneColor.Texture);
+		AddCopyTexturePass(GraphBuilder, outputTexture, SceneColor.Texture);
+
+		// Keep around the current texture until next frame
+		GraphBuilder.QueueTextureExtraction(outputTexture, &historyBuffer);
 	}
 
 	// The call expects ScreenPassTexture as a return, we return with the same texture as we started with, see AddCopyTexturePass above 

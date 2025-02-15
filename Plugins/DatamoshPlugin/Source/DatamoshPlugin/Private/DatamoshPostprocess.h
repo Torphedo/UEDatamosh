@@ -25,6 +25,7 @@ public:
 
 	// The pass we want to hook into
 	static const EPostProcessingPass target_pass = EPostProcessingPass::MotionBlur;
+	TRefCountPtr<IPooledRenderTarget> historyBuffer = nullptr;
 	
 	// This is the method to hook into PostProcessing pass
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
@@ -33,7 +34,7 @@ public:
 	virtual void SubscribeToPostProcessingPass(EPostProcessingPass PassId, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled);
 #endif
 
-	// This is our actual processing function
+	// This is our callback during the rendering pass, called every frame we're active
 	FScreenPassTexture CustomPostProcessing(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessMaterialInputs& Inputs);
 };
 
