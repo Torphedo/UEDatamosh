@@ -2,14 +2,14 @@
     "FileVersion": 3,
     "Version": 1,
     "VersionName": "1.0",
-    "FriendlyName": "SceneViewExtensionTemplate",
-    "Description": "Plugin template for Custom SceneViewExtension",
+    "FriendlyName": "Datamosh Postprocessing Effect",
+    "Description": "A custom renderer extension implementing datamoshing",
     "Category": "Code Tools",
     "CreatedBy": "Ossi Luoto",
     "Modules": [
 
         {
-            "Name": "SceneViewExtensionTemplate",
+            "Name": "DatamoshPlugin",
             "Type": "Runtime",
             "LoadingPhase": "PostConfigInit",
             "WhitelistPlatforms": [ "Win64"]

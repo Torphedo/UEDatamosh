@@ -4,8 +4,8 @@
 using UnrealBuildTool;
 using System.IO;
 
-public class SceneViewExtensionTemplate : ModuleRules {
-    public SceneViewExtensionTemplate(ReadOnlyTargetRules Target) : base(Target) {
+public class DatamoshPlugin : ModuleRules {
+    public DatamoshPlugin(ReadOnlyTargetRules Target) : base(Target) {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicDependencyModuleNames.AddRange(new string[] {

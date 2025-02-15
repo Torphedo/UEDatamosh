@@ -19,7 +19,7 @@
 			]
 		},
 		{
-			"Name": "SceneViewExtensionTemplate",
+			"Name": "DatamoshPlugin",
 			"Enabled": true
 		}
 	]

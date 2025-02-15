@@ -45,7 +45,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(FCommonShaderParameters, )
 END_SHADER_PARAMETER_STRUCT()
 
 // Custom Post Process Shader
-class SCENEVIEWEXTENSIONTEMPLATE_API FCustomShader : public FGlobalShader {
+class DATAMOSHPLUGIN_API FCustomShader : public FGlobalShader {
 public:
 	DECLARE_GLOBAL_SHADER(FCustomShader)
 		SHADER_USE_PARAMETER_STRUCT(FCustomShader, FGlobalShader)

@@ -8,7 +8,7 @@
 #include "Modules/ModuleManager.h"
 #include "Modules/ModuleInterface.h"
 
-struct FSceneViewExtensionTemplate : IModuleInterface {
+struct FDatamoshPlugin : IModuleInterface {
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;

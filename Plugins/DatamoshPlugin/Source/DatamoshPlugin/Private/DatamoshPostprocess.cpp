@@ -7,7 +7,7 @@
 #include <ScreenPass.h>
 #include <PostProcess/PostProcessMaterial.h>
 
-IMPLEMENT_GLOBAL_SHADER(FCustomShader, "/Plugins/SceneViewExtensionTemplate/PostProcessCS.usf", "MainCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FCustomShader, "/Plugins/DatamoshPlugin/PostProcessCS.usf", "MainCS", SF_Compute);
 
 TAutoConsoleVariable<bool> CVarShaderOn(TEXT("r.DoDatamosh"),
 	false,
@@ -16,7 +16,7 @@ TAutoConsoleVariable<bool> CVarShaderOn(TEXT("r.DoDatamosh"),
 
 
 FCustomSceneViewExtension::FCustomSceneViewExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {
-	UE_LOG(LogTemp, Log, TEXT("SceneViewExtensionTemplate: Custom SceneViewExtension registered"));
+	UE_LOG(LogTemp, Log, TEXT("Datamosh Plugin: registered SceneViewExtension with renderer"));
 }
 
 // From engine v5.5, the subscribe to postprocessing pass takes FSceneView as input
