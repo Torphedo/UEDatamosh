@@ -4,12 +4,12 @@
 // 
 // Custom SceneViewExtension implementation
 
-#include "CoreMinimal.h"
-#include "RenderGraphUtils.h"
-#include "SceneViewExtension.h"
-#include "PostProcess/PostProcessMaterial.h"
+#include <CoreMinimal.h>
+#include <RenderGraphUtils.h>
+#include <SceneViewExtension.h>
+
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
-#include "DataDrivenShaderPlatformInfo.h"
+#include <DataDrivenShaderPlatformInfo.h>
 #endif
 
 class FCustomSceneViewExtension : public FSceneViewExtensionBase {

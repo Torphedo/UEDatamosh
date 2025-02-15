@@ -4,7 +4,7 @@
 // Main Module to set Shader Directories
 
 #include "SceneViewExtensionTemplate.h"
-#include "Interfaces/IPluginManager.h"
+#include <Interfaces/IPluginManager.h>
 
 #define LOCTEXT_NAMESPACE "SceneViewExtensionTemplate"
 

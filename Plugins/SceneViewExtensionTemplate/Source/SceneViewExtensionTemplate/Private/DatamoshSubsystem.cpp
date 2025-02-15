@@ -1,11 +1,10 @@
-// Custom SceneViewExtension Template for Unreal Engine
 // Copyright 2023 - 2024 Ossi Luoto
 // 
-// Subsystem to keep custom SceneViewExtension alive
+// Engine subsystem to keep our rendering extension alive (see header)
 
-#include "TemplateSubsystem.h"
-#include "CustomSceneViewExtension.h"
-#include "SceneViewExtension.h"
+#include "DatamoshSubsystem.h"
+#include "DatamoshPostprocess.h"
+#include <SceneViewExtension.h>
 
 void UTemplateSubsystem::Initialize(FSubsystemCollectionBase& Collection) {
 	CustomSceneViewExtension = FSceneViewExtensions::NewExtension<FCustomSceneViewExtension>();

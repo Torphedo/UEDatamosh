@@ -3,8 +3,9 @@
 // 
 // Custom SceneViewExtension implementation
 
-#include "CustomSceneViewExtension.h"
-#include "ScreenPass.h"
+#include "DatamoshPostprocess.h"
+#include <ScreenPass.h>
+#include <PostProcess/PostProcessMaterial.h>
 
 IMPLEMENT_GLOBAL_SHADER(FCustomShader, "/Plugins/SceneViewExtensionTemplate/PostProcessCS.usf", "MainCS", SF_Compute);
 
