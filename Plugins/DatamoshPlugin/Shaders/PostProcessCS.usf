@@ -1,7 +1,6 @@
-// Custom SceneViewExtension Template for Unreal Engine
-// Copyright 2023 - 2024 Ossi Luoto
+// Copyright 2023 - 2024 Ossi Luoto, 2025 Torphedo
 // 
-// Custom CS PostProcessing Shader
+// Datamoshing compute shader
 
 #include "/Engine/Public/Platform.ush"
 #include "/Engine/Private/Common.ush"
@@ -46,22 +45,20 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
     // As the actual viewport might not utilize the full texture, we need to scale accordingly - see calculation on the .cpp side
     sampleUV = sampleUV * SceneColorUVScale;
 
-    // sample OriginalColor
     float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
-	// Sample velocity
     float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-
-    // For testing, and our actual effect here, switch Red and Blue
-    // float4 OutputColor = OriginalColor.zyxw;
-    float4 OutputColor = OriginalColor;
+	// Map velocity down to more reasonable vector values
 	velocityColor = (velocityColor > 0) * (velocityColor - 0.5f);
-	OutputColor.rg += 0.25 * velocityColor.rg;
-	// OutputColor = float4(velocityColor.rg, 0, 0);
+
+	// Visualize motion vectors on top of the normal frame
+	// OriginalColor.rg += 0.1 * velocityColor.rg;
+
+	// Visualize motion vectors in output color
+	// OriginalColor = float4(velocityColor.rg, 0, 0);
 
     // Write output
-	float2 outputUV = (View.ViewRectMin.xy);
-    Output[outputUV + DispatchThreadId] = OutputColor;
-    Output[outputUV + (750 * (velocityColor.rg)) + DispatchThreadId] = OutputColor;
-    // Output[sampleUV] = OutputColor;
+	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
+    // Output[outputUV] = OriginalColor;
+    Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
 }

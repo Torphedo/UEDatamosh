@@ -25,9 +25,11 @@ public:
 
 	// The pass we want to hook into
 	static const EPostProcessingPass target_pass = EPostProcessingPass::MotionBlur;
+
+	// Simulated i-frame that persists across frames
 	TRefCountPtr<IPooledRenderTarget> historyBuffer = nullptr;
 	
-	// This is the method to hook into PostProcessing pass
+	// This is the method to hook into PostProcessing pass. Engine v5.5 added a parameter so we have 2 signatures
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
 	virtual void SubscribeToPostProcessingPass(EPostProcessingPass PassId, const FSceneView& View, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled);
 #else

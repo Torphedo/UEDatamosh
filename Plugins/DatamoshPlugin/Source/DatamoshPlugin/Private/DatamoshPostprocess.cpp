@@ -1,7 +1,5 @@
-// Custom SceneViewExtension Template for Unreal Engine
-// Copyright 2023 - 2024 Ossi Luoto
-// 
-// Custom SceneViewExtension implementation
+// Copyright 2023 - 2024 Ossi Luoto, 2025 Torphedo
+// Implementation of datamoshing postprocess pass
 
 #include "DatamoshPostprocess.h"
 #include <ScreenPass.h>
@@ -24,62 +22,47 @@ FCustomSceneViewExtension::FCustomSceneViewExtension(const FAutoRegister& AutoRe
 	UE_LOG(LogTemp, Log, TEXT("Datamosh Plugin: registered SceneViewExtension with renderer"));
 }
 
-// From engine v5.5, the subscribe to postprocessing pass takes FSceneView as input
+// Engine v5.5 added an extra parameter, so we maintain 2 different signatures. Since we don't use the new parameter,
+// the body remains the same.
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5
-void FCustomSceneViewExtension::SubscribeToPostProcessingPass(EPostProcessingPass PassId, const FSceneView& View, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled)
-{
-	// Define to what Post Processing stage to hook the SceneViewExtension into. See SceneViewExtension.h and PostProcessing.cpp for more info
-	if (PassId == target_pass) {
-		InOutPassCallbacks.Add(FAfterPassCallbackDelegate::CreateRaw(this, &FCustomSceneViewExtension::CustomPostProcessing));
-	}
-}
+	void FCustomSceneViewExtension::SubscribeToPostProcessingPass(EPostProcessingPass PassId, const FSceneView& View, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled)
 #else
-void FCustomSceneViewExtension::SubscribeToPostProcessingPass(EPostProcessingPass PassId, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled)
-{
-	// Define to what Post Processing stage to hook the SceneViewExtension into. See SceneViewExtension.h and PostProcessing.cpp for more info
-	if (PassId == target_pass) {
-		InOutPassCallbacks.Add(FAfterPassCallbackDelegate::CreateRaw(this, &FCustomSceneViewExtension::CustomPostProcessing));
-	}
-}
+	void FCustomSceneViewExtension::SubscribeToPostProcessingPass(EPostProcessingPass PassId, FAfterPassCallbackDelegateArray& InOutPassCallbacks, bool bIsPassEnabled)
 #endif
+{
+	// The engine rendering pipeline calls us at every stage of every frame, and we register our custom pass callback
+	// for the stage we want to inject into.
+	// See SceneViewExtension.h and PostProcessing.cpp for more info
 
-// We only bother to factor this out to keep the ifdefs out of other code.
-FScreenPassTexture getTexture(FRDGBuilder& GraphBuilder, const FPostProcessMaterialInputs& Inputs, EPostProcessMaterialInput target_input) {
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
-	return FScreenPassTexture::CopyFromSlice(GraphBuilder, Inputs.GetInput(target_input));
-#else
-	return Inputs.Textures[(uint32)target_input];
-#endif
+	// When the CVar controlling the shader is off, don't even bother registering a callback.
+	if (PassId == target_pass && CVarShaderOn.GetValueOnRenderThread()) {
+		InOutPassCallbacks.Add(FAfterPassCallbackDelegate::CreateRaw(this, &FCustomSceneViewExtension::CustomPostProcessing));
+	}
 }
 
 FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& GraphBuilder, const FSceneView& SceneView, const FPostProcessMaterialInputs& Inputs)
 {
-	const FScreenPassTexture& SceneColor = getTexture(GraphBuilder, Inputs, EPostProcessMaterialInput::SceneColor);
-	const FScreenPassTexture& Velocity = getTexture(GraphBuilder, Inputs, EPostProcessMaterialInput::Velocity);
+	// This had been ifdef'd behind engine version >= 5.4, but the function seems to have existed since at least v5.0
+	// (according to the docs). If you get a crash here, try getting the texture like: Inputs.Textures[target_input]
+	const FScreenPassTexture& SceneColor = FScreenPassTexture::CopyFromSlice(GraphBuilder, Inputs.GetInput(EPostProcessMaterialInput::SceneColor));
+	const FScreenPassTexture& Velocity = FScreenPassTexture::CopyFromSlice(GraphBuilder, Inputs.GetInput(EPostProcessMaterialInput::Velocity));
 
-	// Cancel our custom pass based on the CVar
-	if (!SceneColor.IsValid() || !CVarShaderOn.GetValueOnRenderThread()) {
-		return SceneColor;
-	}
-	
-	// SceneViewExtension gives SceneView, not ViewInfo so we need to setup some basics
-	const FSceneViewFamily& ViewFamily = *SceneView.Family;
-	const ERHIFeatureLevel::Type FeatureLevel = SceneView.GetFeatureLevel();
-
-	// Here starts the RDG stuff
-	RDG_EVENT_SCOPE(GraphBuilder, "Custom Postprocess Effect");
+	// Start building render graph for our custom pass
+	RDG_EVENT_SCOPE(GraphBuilder, "Datamoshing Pass");
 	{
-		// Access point for our Shaders
-		const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(ViewFamily.GetFeatureLevel());
+		// Get access point for our shaders
+		const FGlobalShaderMap* GlobalShaderMap = GetGlobalShaderMap(SceneView.Family->GetFeatureLevel());
 
-		// Setup all the descriptors to create a target texture
+		// Setup target texture descriptors
 		FRDGTextureDesc OutputDesc;
 		{
 			OutputDesc = SceneColor.Texture->Desc;
 
+			// TODO: There's no way a C++ codebase this massive doesn't have a wrapper to make bitmask flags easier
+			// to work with. Find their flag utility functions and use them here.
 			OutputDesc.Reset();
-			OutputDesc.Flags |= TexCreate_UAV;
-			OutputDesc.Flags &= ~(TexCreate_RenderTargetable | TexCreate_FastVRAM);
+			OutputDesc.Flags |= TexCreate_UAV; // Needed for arbitrary writes in the compute shader
+			OutputDesc.Flags &= ~(TexCreate_RenderTargetable | TexCreate_FastVRAM); // Unset these flags
 
 			OutputDesc.ClearValue = FClearValueBinding::Black;
 		}
@@ -106,14 +89,13 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		PassParameters->CommonParameters = CommonParameters;
 		
 		// Create target texture which will persist between frames.
-		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp.
-		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Custom Effect Output Texture"), ERDGTextureFlags::MultiFrame);
-		// Create UAV from Target Texture
+		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp, we use the same technique to keep
+		// a history buffer around.
+		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::MultiFrame);
+		
+		// Create UAV from target texture
 		PassParameters->Output = GraphBuilder.CreateUAV(outputTexture);
 
-		// Copy current framebuffer to output
-		AddCopyTexturePass(GraphBuilder, SceneColor.Texture, outputTexture);
-		
 		if (CVarFreezeFrame.GetValueOnRenderThread() && historyBuffer != nullptr) {
 			// Use the output from last frame as if it was the current framebuffer
 			PassParameters->OriginalSceneColor = GraphBuilder.RegisterExternalTexture(historyBuffer);
@@ -122,7 +104,6 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		}
 		
 		PassParameters->Velocity = Velocity.Texture;
-
 
 		// Set Compute Shader and execute
 		const int32 kDefaultGroupSize = 8;
@@ -133,7 +114,7 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 
 		FComputeShaderUtils::AddPass(
 			GraphBuilder,
-			RDG_EVENT_NAME("Custom SceneViewExtension Post Processing CS Shader %dx%d", PassViewSize.Width(), PassViewSize.Height()),
+			RDG_EVENT_NAME("Custom Datamoshing Compute Shader %dx%d", PassViewSize.Width(), PassViewSize.Height()),
 			ComputeShader,
 			PassParameters,
 			GroupCount);
