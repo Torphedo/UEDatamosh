@@ -42,6 +42,16 @@ FCustomSceneViewExtension::FCustomSceneViewExtension(const FAutoRegister& AutoRe
 
 FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& GraphBuilder, const FSceneView& SceneView, const FPostProcessMaterialInputs& Inputs)
 {
+	// We save the current & previous frames' inverse MVP matrix, so we can transform each pixel location in the shader
+	// into a world space position. Then we can find the difference to find out the screen space movement in the last
+	// frame.
+	
+	// SceneView.GetViewDirection()
+	// SceneView.PixelToWorld()
+	// SceneView.ScreenToPixel()
+	static FMatrix prev_screen_to_world = SceneView.ViewMatrices.GetInvViewProjectionMatrix();
+	FMatrix cur_screen_to_world = SceneView.ViewMatrices.GetInvViewProjectionMatrix();
+	
 	// This had been ifdef'd behind engine version >= 5.4, but the function seems to have existed since at least v5.0
 	// (according to the docs). If you get a crash here, try getting the texture like: Inputs.Textures[target_input]
 	const FScreenPassTexture& SceneColor = FScreenPassTexture::CopyFromSlice(GraphBuilder, Inputs.GetInput(EPostProcessMaterialInput::SceneColor));
@@ -64,7 +74,7 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 			OutputDesc.Flags |= TexCreate_UAV; // Needed for arbitrary writes in the compute shader
 			OutputDesc.Flags &= ~(TexCreate_RenderTargetable | TexCreate_FastVRAM); // Unset these flags
 
-			OutputDesc.ClearValue = FClearValueBinding::Black;
+			OutputDesc.ClearValue = FClearValueBinding::Transparent;
 		}
 
 		// Set the shader parameters
@@ -88,20 +98,22 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		CommonParameters.ViewUniformBuffer = SceneView.ViewUniformBuffer;
 		PassParameters->CommonParameters = CommonParameters;
 		
-		// Create target texture which will persist between frames.
+		// Create target texture and a history buffer which will persist between frames.
 		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp, we use the same technique to keep
 		// a history buffer around.
-		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::MultiFrame);
+		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::None);
+		FRDGTextureRef history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
+
+		if (CVarFreezeFrame.GetValueOnRenderThread()) {
+			if (historyBuffer != nullptr) {
+                history = GraphBuilder.RegisterExternalTexture(historyBuffer);
+			}
+		}
 		
 		// Create UAV from target texture
+        PassParameters->OriginalSceneColor = SceneColor.Texture;
 		PassParameters->Output = GraphBuilder.CreateUAV(outputTexture);
-
-		if (CVarFreezeFrame.GetValueOnRenderThread() && historyBuffer != nullptr) {
-			// Use the output from last frame as if it was the current framebuffer
-			PassParameters->OriginalSceneColor = GraphBuilder.RegisterExternalTexture(historyBuffer);
-		} else {
-			PassParameters->OriginalSceneColor = SceneColor.Texture;
-		}
+        PassParameters->historyBuffer = GraphBuilder.CreateUAV(history);
 		
 		PassParameters->Velocity = Velocity.Texture;
 
@@ -123,9 +135,8 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// Returning the new texture as ScreenPassTexture doesn't work, so this is pretty fast alternative
 		// Also with f.ex 'PrePostProcessPass_RenderThread' you get only input and something similar needs to be implemented then
 		AddCopyTexturePass(GraphBuilder, outputTexture, SceneColor.Texture);
-
-		// Keep around the current texture until next frame
-		GraphBuilder.QueueTextureExtraction(outputTexture, &historyBuffer);
+		
+        GraphBuilder.QueueTextureExtraction(history, &historyBuffer);
 	}
 
 	// The call expects ScreenPassTexture as a return, we return with the same texture as we started with, see AddCopyTexturePass above 

@@ -24,8 +24,13 @@ float2 ViewportInvSize;
 // This is the multiplier to scale Viewport UV (0..1) to current SceneColor RT
 float2 SceneColorUVScale;
 
+// TODO: Document these
+float4x4 prev_screen_to_world;
+float4x4 curr_screen_to_world;
+
 // Output
-RWTexture2D<float3> Output;
+RWTexture2D<float4> Output;
+RWTexture2D<float4> historyBuffer;
 
 // Compute Shader code
 [numthreads(GROUP_BORDER_SIZE, GROUP_BORDER_SIZE, 1)]
@@ -48,8 +53,13 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
     float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
     float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
+	bool has_motion = (velocityColor > 0);
+
+	// float2 prev_world_pos = sampleUV * prev_screen_to_world;
+	// float2 curr_world_pos = sampleUV * curr_screen_to_world;
+	
 	// Map velocity down to more reasonable vector values
-	velocityColor = (velocityColor > 0) * (velocityColor - 0.5f);
+	velocityColor = has_motion * (velocityColor - 0.5f);
 
 	// Visualize motion vectors on top of the normal frame
 	// OriginalColor.rg += 0.1 * velocityColor.rg;
@@ -59,6 +69,15 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 
     // Write output
 	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
-    // Output[outputUV] = OriginalColor;
-    Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
+	float2 motionUV = outputUV + (200 * (velocityColor.rg));
+    // Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
+    // historyBuffer[outputUV] = float4(0, 0, 0, 0);
+	if (has_motion) {
+        historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+	}
+    // Output[outputUV] = (historyBuffer[outputUV] * historyBuffer[outputUV].a) + (OriginalColor * !historyBuffer[outputUV].a);
+
+	float4 historyColor = historyBuffer[outputUV];
+    Output[outputUV] = OriginalColor * !historyColor.a + historyBuffer[outputUV] * historyColor.a;
+    // Output[outputUV] = historyBuffer[outputUV];
 }
