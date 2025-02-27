@@ -104,10 +104,15 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::None);
 		FRDGTextureRef history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
 
+		static bool frozen_last_frame = false;
 		if (CVarFreezeFrame.GetValueOnRenderThread()) {
+			frozen_last_frame = true;
 			if (historyBuffer != nullptr) {
                 history = GraphBuilder.RegisterExternalTexture(historyBuffer);
 			}
+		} else if (frozen_last_frame) {
+			frozen_last_frame = false;
+            AddCopyTexturePass(GraphBuilder, SceneColor.Texture, history);
 		}
 		
 		// Create UAV from target texture

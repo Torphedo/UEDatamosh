@@ -36,23 +36,23 @@ RWTexture2D<float4> historyBuffer;
 [numthreads(GROUP_BORDER_SIZE, GROUP_BORDER_SIZE, 1)]
 void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// Check that we are in scope
-    if (any(DispatchThreadId >= ViewportRect.zw)) {
-        return;
-    }
+	if (any(DispatchThreadId >= ViewportRect.zw)) {
+		return;
+	}
 
-    // If we have the Original Scene Color still here, we need to use the original offset as well
-    // Due to UniformBuffer referring to the Viewport before TAA (this might change in the future?) we need to apply scale to the UV
-    float2 sampleUV = (float2(View.ViewRectMin.xy) + (DispatchThreadId + 0.5)) * ViewportInvSize;
+	// If we have the Original Scene Color still here, we need to use the original offset as well
+	// Due to UniformBuffer referring to the Viewport before TAA (this might change in the future?) we need to apply scale to the UV
+	float2 sampleUV = (float2(View.ViewRectMin.xy) + (DispatchThreadId + 0.5)) * ViewportInvSize;
 
-    // At this point our sampleUV is mapped to 0..1
-    // This is the UV value one might want to use if f.ex. altering the coordinates via shader formula
+	// At this point our sampleUV is mapped to 0..1
+	// This is the UV value one might want to use if f.ex. altering the coordinates via shader formula
 
-    // As the actual viewport might not utilize the full texture, we need to scale accordingly - see calculation on the .cpp side
-    sampleUV = sampleUV * SceneColorUVScale;
+	// As the actual viewport might not utilize the full texture, we need to scale accordingly - see calculation on the .cpp side
+	sampleUV = sampleUV * SceneColorUVScale;
 
-    float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
+	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
-    float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
+	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	bool has_motion = (velocityColor > 0);
 
 	// float2 prev_world_pos = sampleUV * prev_screen_to_world;
@@ -67,17 +67,21 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// Visualize motion vectors in output color
 	// OriginalColor = float4(velocityColor.rg, 0, 0);
 
-    // Write output
+	// Write output
 	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
-	float2 motionUV = outputUV + (200 * (velocityColor.rg));
-    // Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
-    // historyBuffer[outputUV] = float4(0, 0, 0, 0);
-	if (has_motion) {
-        historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
-	}
-    // Output[outputUV] = (historyBuffer[outputUV] * historyBuffer[outputUV].a) + (OriginalColor * !historyBuffer[outputUV].a);
+	float2 motionUV = outputUV + (1 * (velocityColor.rg));
+	// Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
+	// historyBuffer[outputUV] = float4(0, 0, 0, 0);
+	// Output[outputUV] = (historyBuffer[outputUV] * historyBuffer[outputUV].a) + (OriginalColor * !historyBuffer[outputUV].a);
 
 	float4 historyColor = historyBuffer[outputUV];
-    Output[outputUV] = OriginalColor * !historyColor.a + historyBuffer[outputUV] * historyColor.a;
-    // Output[outputUV] = historyBuffer[outputUV];
+	if (historyColor.a) {
+		Output[outputUV] = historyColor;
+	} else {
+		Output[outputUV] = OriginalColor;
+    }
+	
+	if (has_motion) {
+		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+	}
 }
