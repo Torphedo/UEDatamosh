@@ -115,17 +115,11 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// Create target texture and a history buffer which will persist between frames.
 		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp, we use the same technique to keep
 		// a history buffer around.
-		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::None);
 		FRDGTextureRef history = nullptr;
 		// We have to go through a fairly deep tree of structs to access scene depth
 		FRDGTextureRef depthTex = Inputs.SceneTextures.SceneTextures->GetContents()->SceneDepthTexture;
 
-		// Make sure we're unfrozen on startup
-		if (historyBuffer == nullptr) {
-			CVarFreezeFrame->Set(false, ECVF_SetByPluginHighPriority);
-		}
-		
-		if (CVarFreezeFrame.GetValueOnRenderThread()) {
+		if (CVarFreezeFrame.GetValueOnRenderThread() && historyBuffer != nullptr) {
 			// While frozen, keep the old texture around and don't let the shader use the current frame
 			history = GraphBuilder.RegisterExternalTexture(historyBuffer);
 			PassParameters->OriginalSceneColor = history;
@@ -138,7 +132,6 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		}
 		
 		// Create UAV from target texture
-		PassParameters->Output = GraphBuilder.CreateUAV(outputTexture);
         PassParameters->historyBuffer = GraphBuilder.CreateUAV(history);
 		
 		PassParameters->Velocity = Velocity.Texture;
@@ -166,7 +159,7 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// Copy the output texture back to SceneColor
 		// Returning the new texture as ScreenPassTexture doesn't work, so this is pretty fast alternative
 		// Also with f.ex 'PrePostProcessPass_RenderThread' you get only input and something similar needs to be implemented then
-		AddCopyTexturePass(GraphBuilder, outputTexture, SceneColor.Texture);
+		AddCopyTexturePass(GraphBuilder, history, SceneColor.Texture);
 		
         GraphBuilder.QueueTextureExtraction(history, &historyBuffer);
 		prev_screen_to_world = cur_screen_to_world;

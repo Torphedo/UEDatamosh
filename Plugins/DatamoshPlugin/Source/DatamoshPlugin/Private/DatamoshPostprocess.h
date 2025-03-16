@@ -69,7 +69,6 @@ public:
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Velocity)
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Depth)
 			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, historyBuffer)
-			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, Output)
 		END_SHADER_PARAMETER_STRUCT()
 
 	// Basic shader stuff

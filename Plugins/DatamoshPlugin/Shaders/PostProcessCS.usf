@@ -31,7 +31,6 @@ float4x4 curr_screen_to_world;
 float4x4 world_to_screen;
 
 // Output
-RWTexture2D<float4> Output;
 RWTexture2D<float4> historyBuffer;
 
 // Compute Shader code
@@ -93,10 +92,5 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
 	historyBuffer[outputUV] = OriginalColor;
-	if (has_motion) {
-		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
-	}
-
-	// Copy history buffer to output framebuffer
-	Output[outputUV] = historyBuffer[outputUV];
+	historyBuffer[motionUV] = OriginalColor;
 }
