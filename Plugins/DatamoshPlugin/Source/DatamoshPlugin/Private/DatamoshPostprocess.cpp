@@ -116,16 +116,24 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// See Engine/Source/Runtime/Renderer/Private/PostProcess/TemporalAA.cpp, we use the same technique to keep
 		// a history buffer around.
 		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::None);
-		FRDGTextureRef history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
+		FRDGTextureRef history = nullptr;
 		// We have to go through a fairly deep tree of structs to access scene depth
 		FRDGTextureRef depthTex = Inputs.SceneTextures.SceneTextures->GetContents()->SceneDepthTexture;
 
+		// Make sure we're unfrozen on startup
+		if (historyBuffer == nullptr) {
+			CVarFreezeFrame->Set(false, ECVF_SetByPluginHighPriority);
+		}
+		
 		if (CVarFreezeFrame.GetValueOnRenderThread()) {
-			if (historyBuffer != nullptr) {
-                history = GraphBuilder.RegisterExternalTexture(historyBuffer);
-			}
+			// While frozen, keep the old texture around and don't let the shader use the current frame
+			history = GraphBuilder.RegisterExternalTexture(historyBuffer);
 			PassParameters->OriginalSceneColor = history;
 		} else {
+			// While we're unfrozen, keep history buffer synced with framebuffer
+			history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
+			AddCopyTexturePass(GraphBuilder, SceneColor.Texture, history);
+			
 			PassParameters->OriginalSceneColor = SceneColor.Texture;
 		}
 		
