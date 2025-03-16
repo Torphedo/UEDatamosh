@@ -43,6 +43,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// If we have the Original Scene Color still here, we need to use the original offset as well
 	// Due to UniformBuffer referring to the Viewport before TAA (this might change in the future?) we need to apply scale to the UV
 	float2 sampleUV = (float2(View.ViewRectMin.xy) + (DispatchThreadId + 0.5)) * ViewportInvSize;
+	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
 
 	// At this point our sampleUV is mapped to 0..1
 	// This is the UV value one might want to use if f.ex. altering the coordinates via shader formula
@@ -53,7 +54,13 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-	bool has_motion = (velocityColor > 0);
+	bool has_motion = (length(velocityColor.rg) > 0);
+	if (!has_motion) {
+		float4 screen_point = float4(outputUV, 0.0f, 1.0f);
+		float4 prev_pos = mul(screen_point, prev_screen_to_world);
+		float4 curr_pos = mul(screen_point, curr_screen_to_world);
+		// velocityColor = prev_pos - curr_pos;
+	}
 
 	// float2 prev_world_pos = sampleUV * prev_screen_to_world;
 	// float2 curr_world_pos = sampleUV * curr_screen_to_world;
@@ -68,7 +75,6 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// OriginalColor = float4(velocityColor.rg, 0, 0);
 
 	// Write output
-	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
 	float2 motionUV = outputUV + (1 * (velocityColor.rg));
 	// Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
 	// historyBuffer[outputUV] = float4(0, 0, 0, 0);

@@ -46,11 +46,17 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 	// into a world space position. Then we can find the difference to find out the screen space movement in the last
 	// frame.
 	
-	// SceneView.GetViewDirection()
-	// SceneView.PixelToWorld()
-	// SceneView.ScreenToPixel()
-	static FMatrix prev_screen_to_world = SceneView.ViewMatrices.GetInvViewProjectionMatrix();
-	FMatrix cur_screen_to_world = SceneView.ViewMatrices.GetInvViewProjectionMatrix();
+	// Create a matrix to do the same transform as SceneView.PixelToWorld(), so we can upload it to the GPU and use it
+	// on each pixel position.
+	FMatrix44f cur_screen_to_world;
+	cur_screen_to_world.ScaleTranslation(FVector4f(
+		(1.0f / SceneView.UnscaledViewRect.Width()) * +2.0f,
+		(1.0f / SceneView.UnscaledViewRect.Height()) * -2.0f,
+		1.0f, 1.0f));
+	cur_screen_to_world.ConcatTranslation(FVector4f(-1.0f, 1.0f, 0, 0));
+	cur_screen_to_world *= FMatrix44f(SceneView.ViewMatrices.GetInvViewProjectionMatrix());
+	
+	static FMatrix44f prev_screen_to_world = cur_screen_to_world;
 	
 	// This had been ifdef'd behind engine version >= 5.4, but the function seems to have existed since at least v5.0
 	// (according to the docs). If you get a crash here, try getting the texture like: Inputs.Textures[target_input]
@@ -121,6 +127,9 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
         PassParameters->historyBuffer = GraphBuilder.CreateUAV(history);
 		
 		PassParameters->Velocity = Velocity.Texture;
+
+		PassParameters->curr_screen_to_world = cur_screen_to_world;
+		PassParameters->prev_screen_to_world = prev_screen_to_world;
 
 		// Set Compute Shader and execute
 		const int32 kDefaultGroupSize = 8;
