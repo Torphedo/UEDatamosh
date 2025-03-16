@@ -82,6 +82,13 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
     }
 	
 	if (has_motion) {
+		// Copy moving pixels to their new location
 		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+
+		// Copy a new pixel to this location to make the background sort of follow the motion
+		float2 inverse_motionUV = outputUV - (1 * (velocityColor.rg));
+		// float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
+		historyBuffer[sampleUV] = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, inverse_motionUV, 0);
 	}
+    // Output[outputUV] = float4(velocityColor.rg, 0.0f, 0.0f);
 }
