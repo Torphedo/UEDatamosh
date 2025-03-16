@@ -44,7 +44,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// If we have the Original Scene Color still here, we need to use the original offset as well
 	// Due to UniformBuffer referring to the Viewport before TAA (this might change in the future?) we need to apply scale to the UV
 	float2 sampleUV = (float2(View.ViewRectMin.xy) + (DispatchThreadId + 0.5)) * ViewportInvSize;
-	float2 outputUV = (View.ViewRectMin.xy + DispatchThreadId);
+	float2 outputUV = View.ViewRectMin.xy + DispatchThreadId;
 
 	// At this point our sampleUV is mapped to 0..1
 	// This is the UV value one might want to use if f.ex. altering the coordinates via shader formula
@@ -62,13 +62,10 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 		float4 curr_pos = mul(curr_screen_to_world, screen_point);
 		float4 screen_diff = mul(world_to_screen, curr_pos - prev_pos);
 		
-		velocityColor = screen_diff;
+		velocityColor = screen_diff * 0.1f;
 		has_motion = length(velocityColor.r) > 0 && velocityColor.g > 0;
 	}
 
-	// float2 prev_world_pos = sampleUV * prev_screen_to_world;
-	// float2 curr_world_pos = sampleUV * curr_screen_to_world;
-	
 	// Map velocity down to more reasonable vector values
 	velocityColor = has_motion * (velocityColor - 0.5f);
 
@@ -80,27 +77,13 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 
 	// Write output
 	float2 motionUV = outputUV + (1 * (velocityColor.rg));
-	Output[outputUV] = OriginalColor;
-	Output[motionUV] = OriginalColor;
-	// historyBuffer[outputUV] = float4(0, 0, 0, 0);
-	// Output[outputUV] = (historyBuffer[outputUV] * historyBuffer[outputUV].a) + (OriginalColor * !historyBuffer[outputUV].a);
 
+	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
+	// distorts.
 	float4 historyColor = historyBuffer[outputUV];
+	historyBuffer[outputUV] = OriginalColor;
 	historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
-	return;
-	if (historyColor.a) {
-		Output[outputUV] = historyColor;
-	} else {
-		Output[outputUV] = OriginalColor;
-    }
 
-	if (has_motion) {
-		// Copy moving pixels to their new location
-		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
-
-		// Copy a new pixel to this location to make the background sort of follow the motion
-		float2 inverse_motionUV = outputUV - (1 * (velocityColor.rg));
-		// float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-		historyBuffer[sampleUV] = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, inverse_motionUV, 0);
-	}
+	// Copy history buffer to output framebuffer
+	Output[outputUV] = historyBuffer[outputUV];
 }
