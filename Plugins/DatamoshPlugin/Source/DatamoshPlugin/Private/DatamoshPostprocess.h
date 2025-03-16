@@ -63,6 +63,7 @@ public:
 	
 			SHADER_PARAMETER(FMatrix44f, prev_screen_to_world)
 			SHADER_PARAMETER(FMatrix44f, curr_screen_to_world)
+			SHADER_PARAMETER(FMatrix44f, world_to_screen)
 
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OriginalSceneColor)
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Velocity)

@@ -27,6 +27,7 @@ float2 SceneColorUVScale;
 // TODO: Document these
 float4x4 prev_screen_to_world;
 float4x4 curr_screen_to_world;
+float4x4 world_to_screen;
 
 // Output
 RWTexture2D<float4> Output;
@@ -54,12 +55,15 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-	bool has_motion = (length(velocityColor.rg) > 0);
+	bool has_motion = length(velocityColor.r) > 0 && velocityColor.g > 0;
 	if (!has_motion) {
 		float4 screen_point = float4(outputUV, 0.0f, 1.0f);
-		float4 prev_pos = mul(screen_point, prev_screen_to_world);
-		float4 curr_pos = mul(screen_point, curr_screen_to_world);
-		// velocityColor = prev_pos - curr_pos;
+		float4 prev_pos = mul(prev_screen_to_world, screen_point);
+		float4 curr_pos = mul(curr_screen_to_world, screen_point);
+		float4 screen_diff = mul(world_to_screen, curr_pos - prev_pos);
+		
+		velocityColor = screen_diff;
+		has_motion = length(velocityColor.r) > 0 && velocityColor.g > 0;
 	}
 
 	// float2 prev_world_pos = sampleUV * prev_screen_to_world;
@@ -76,17 +80,20 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 
 	// Write output
 	float2 motionUV = outputUV + (1 * (velocityColor.rg));
-	// Output[outputUV + (200 * (velocityColor.rg))] = OriginalColor;
+	Output[outputUV] = OriginalColor;
+	Output[motionUV] = OriginalColor;
 	// historyBuffer[outputUV] = float4(0, 0, 0, 0);
 	// Output[outputUV] = (historyBuffer[outputUV] * historyBuffer[outputUV].a) + (OriginalColor * !historyBuffer[outputUV].a);
 
 	float4 historyColor = historyBuffer[outputUV];
+	historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+	return;
 	if (historyColor.a) {
 		Output[outputUV] = historyColor;
 	} else {
 		Output[outputUV] = OriginalColor;
     }
-	
+
 	if (has_motion) {
 		// Copy moving pixels to their new location
 		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
@@ -96,5 +103,4 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 		// float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 		historyBuffer[sampleUV] = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, inverse_motionUV, 0);
 	}
-    // Output[outputUV] = float4(velocityColor.rg, 0.0f, 0.0f);
 }

@@ -48,15 +48,18 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 	
 	// Create a matrix to do the same transform as SceneView.PixelToWorld(), so we can upload it to the GPU and use it
 	// on each pixel position.
+	static FMatrix44f prev_screen_to_world = FMatrix44f();
 	FMatrix44f cur_screen_to_world;
+	cur_screen_to_world.SetIdentity();
 	cur_screen_to_world.ScaleTranslation(FVector4f(
 		(1.0f / SceneView.UnscaledViewRect.Width()) * +2.0f,
 		(1.0f / SceneView.UnscaledViewRect.Height()) * -2.0f,
 		1.0f, 1.0f));
 	cur_screen_to_world.ConcatTranslation(FVector4f(-1.0f, 1.0f, 0, 0));
 	cur_screen_to_world *= FMatrix44f(SceneView.ViewMatrices.GetInvViewProjectionMatrix());
-	
-	static FMatrix44f prev_screen_to_world = cur_screen_to_world;
+	FVector4f point = FVector4f(0.5f, 0.5f, 0.0f, 1.0f);
+	FVector4f cur_point = cur_screen_to_world.TransformPosition(point);
+	FVector4f prev_point = prev_screen_to_world.TransformPosition(point);
 	
 	// This had been ifdef'd behind engine version >= 5.4, but the function seems to have existed since at least v5.0
 	// (according to the docs). If you get a crash here, try getting the texture like: Inputs.Textures[target_input]
@@ -130,6 +133,8 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 
 		PassParameters->curr_screen_to_world = cur_screen_to_world;
 		PassParameters->prev_screen_to_world = prev_screen_to_world;
+		// I couldn't figure out how to do an inverse in the compute shader easily, so we just upload an extra matrix
+		PassParameters->world_to_screen = FMatrix44f(SceneView.ViewMatrices.GetViewProjectionMatrix());
 
 		// Set Compute Shader and execute
 		const int32 kDefaultGroupSize = 8;
@@ -151,6 +156,7 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		AddCopyTexturePass(GraphBuilder, outputTexture, SceneColor.Texture);
 		
         GraphBuilder.QueueTextureExtraction(history, &historyBuffer);
+		prev_screen_to_world = cur_screen_to_world;
 	}
 
 	// The call expects ScreenPassTexture as a return, we return with the same texture as we started with, see AddCopyTexturePass above 
