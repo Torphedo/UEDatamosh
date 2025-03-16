@@ -12,8 +12,13 @@ TAutoConsoleVariable<bool> CVarShaderOn(TEXT("r.DoDatamosh"),
 	TEXT("Toggles Datamoshing\n"),
 	ECVF_RenderThreadSafe);
 
-TAutoConsoleVariable<bool> CVarFreezeFrame(TEXT("r.DatamoshFreeze"),
+TAutoConsoleVariable CVarFreezeFrame(TEXT("r.DatamoshFreeze"),
 	false,
+	TEXT(""),
+	ECVF_RenderThreadSafe);
+
+TAutoConsoleVariable CVarFreezeInterval(TEXT("r.DatamoshFreezeInterval"),
+	1,
 	TEXT(""),
 	ECVF_RenderThreadSafe);
 
