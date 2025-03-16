@@ -53,20 +53,30 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// As the actual viewport might not utilize the full texture, we need to scale accordingly - see calculation on the .cpp side
 	sampleUV = sampleUV * SceneColorUVScale;
 
+	// Sample textures
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r;
-	bool has_motion = length(velocityColor.r) > 0 || velocityColor.g > 0;
-	if (!has_motion) {
-		float4 screen_point = float4(outputUV, depthColor, 1.0f);
-		float4 prev_pos = mul(prev_screen_to_world, screen_point);
-		float4 curr_pos = mul(curr_screen_to_world, screen_point);
-		float4 screen_diff = mul(world_to_screen, curr_pos - prev_pos);
+	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r; // Only red channel matters
+
+	bool has_motion = length(velocityColor.rg) > 0;
+
+	// Calculate screen-space object movement
+	// TODO: Historical depth buffer for more accuracy?
+	float2 curr_pos = outputUV;
+	float4 screen_point = float4(curr_pos, depthColor, 1.0f);
+	float2 prev_pos = mul(world_to_screen, mul(prev_screen_to_world, screen_point));
+	float2 screen_diff = curr_pos - prev_pos;
+
+	// Try to nullify motion if the camera isn't moving
+	float threshold = 3.0f;
+	screen_diff.x *= screen_diff.x > threshold;
+	screen_diff.y *= screen_diff.y > threshold;
 		
-		velocityColor = screen_diff * 0.1f;
-		has_motion = length(velocityColor.r) > 0 || velocityColor.g > 0;
+	if (!has_motion) {
+		// Only apply the less accurate guess when we don't have a real velocity vector
+		velocityColor.rg = screen_diff * depthColor * 25;
 	}
+	has_motion = length(velocityColor.rg) > 0;
 
 	// Map velocity down to more reasonable vector values
 	velocityColor = has_motion * (velocityColor - 0.5f);
@@ -82,9 +92,10 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
-	float4 historyColor = historyBuffer[outputUV];
 	historyBuffer[outputUV] = OriginalColor;
-	historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+	if (has_motion) {
+		historyBuffer[motionUV] = float4(OriginalColor.rgb, 1.0f * has_motion);
+	}
 
 	// Copy history buffer to output framebuffer
 	Output[outputUV] = historyBuffer[outputUV];
