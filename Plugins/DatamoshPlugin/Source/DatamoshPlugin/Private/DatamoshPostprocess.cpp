@@ -112,6 +112,8 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		// a history buffer around.
 		FRDGTextureRef outputTexture = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Output Framebuffer"), ERDGTextureFlags::None);
 		FRDGTextureRef history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
+		// We have to go through a fairly deep tree of structs to access scene depth
+		FRDGTextureRef depthTex = Inputs.SceneTextures.SceneTextures->GetContents()->SceneDepthTexture;
 
 		if (CVarFreezeFrame.GetValueOnRenderThread()) {
 			if (historyBuffer != nullptr) {
@@ -127,6 +129,7 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
         PassParameters->historyBuffer = GraphBuilder.CreateUAV(history);
 		
 		PassParameters->Velocity = Velocity.Texture;
+		PassParameters->Depth = depthTex;
 
 		PassParameters->curr_screen_to_world = cur_screen_to_world;
 		PassParameters->prev_screen_to_world = prev_screen_to_world;

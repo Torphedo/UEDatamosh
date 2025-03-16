@@ -14,6 +14,7 @@
 // SceneColor texture
 Texture2D OriginalSceneColor;
 Texture2D Velocity;
+Texture2D Depth;
 
 // Viewport size
 uint4 ViewportRect;
@@ -55,15 +56,16 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-	bool has_motion = length(velocityColor.r) > 0 && velocityColor.g > 0;
+	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r;
+	bool has_motion = length(velocityColor.r) > 0 || velocityColor.g > 0;
 	if (!has_motion) {
-		float4 screen_point = float4(outputUV, 0.0f, 1.0f);
+		float4 screen_point = float4(outputUV, depthColor, 1.0f);
 		float4 prev_pos = mul(prev_screen_to_world, screen_point);
 		float4 curr_pos = mul(curr_screen_to_world, screen_point);
 		float4 screen_diff = mul(world_to_screen, curr_pos - prev_pos);
 		
 		velocityColor = screen_diff * 0.1f;
-		has_motion = length(velocityColor.r) > 0 && velocityColor.g > 0;
+		has_motion = length(velocityColor.r) > 0 || velocityColor.g > 0;
 	}
 
 	// Map velocity down to more reasonable vector values
