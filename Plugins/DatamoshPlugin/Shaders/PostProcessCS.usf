@@ -74,7 +74,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 		
 	if (!has_motion) {
 		// Only apply the less accurate guess when we don't have a real velocity vector
-		velocityColor.rg = screen_diff * depthColor * 25;
+		velocityColor.rg = screen_diff * depthColor;
 	}
 	has_motion = length(velocityColor.rg) > 0;
 
@@ -88,7 +88,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// OriginalColor = float4(velocityColor.rg, 0, 0);
 
 	// Write output
-	float2 motionUV = outputUV + (1 * (velocityColor.rg));
+	float2 motionUV = outputUV + (1.0f * (velocityColor.rg));
 
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
