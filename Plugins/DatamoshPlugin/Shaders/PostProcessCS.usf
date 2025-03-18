@@ -56,6 +56,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r; // Only red channel matters
+	// velocityColor *= 10.0f;
 
 	bool has_motion = length(velocityColor.rg) > 0;
 
@@ -67,30 +68,33 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float2 screen_diff = curr_pos - prev_pos;
 
 	// Try to nullify motion if the camera isn't moving
-	float threshold = 3.0f;
+	float threshold = 2.0f;
 	screen_diff.x *= screen_diff.x > threshold;
 	screen_diff.y *= screen_diff.y > threshold;
+	
+	if (length(Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV + velocityColor.xy, 0).rg) == 0) {
+		// The target pixel has no motion, nullify. Without this, there's a terrible jittering at higher values
+		// velocityColor = 0;
+	}
 		
 	if (!has_motion) {
 		// Only apply the less accurate guess when we don't have a real velocity vector
-		velocityColor.rg = screen_diff * depthColor;
+		velocityColor.rg += screen_diff * depthColor;
 	}
-	has_motion = length(velocityColor.rg) > 0;
-
-	// Map velocity down to more reasonable vector values
-	velocityColor = has_motion * (velocityColor - 0.5f);
 
 	// Visualize motion vectors on top of the normal frame
 	// OriginalColor.rg += 0.1 * velocityColor.rg;
 
 	// Visualize motion vectors in output color
-	// OriginalColor = float4(velocityColor.rg, 0, 0);
+	// OriginalColor = float4(velocityColor.rg - 0.5f, 0, 0);
 
 	// Write output
 	float2 motionUV = outputUV + (1.0f * (velocityColor.rg));
+	float2 inv_motionUV = outputUV - (1.0f * (velocityColor.rg));
 
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
 	historyBuffer[outputUV] = OriginalColor;
 	historyBuffer[motionUV] = OriginalColor;
+	// historyBuffer[outputUV] = historyBuffer[inv_motionUV];
 }
