@@ -56,45 +56,59 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r; // Only red channel matters
-	// velocityColor *= 10.0f;
-
-	bool has_motion = length(velocityColor.rg) > 0;
 
 	// Calculate screen-space object movement
 	// TODO: Historical depth buffer for more accuracy?
-	float2 curr_pos = outputUV;
-	float4 screen_point = float4(curr_pos, depthColor, 1.0f);
-	float2 prev_pos = mul(world_to_screen, mul(prev_screen_to_world, screen_point));
-	float2 screen_diff = curr_pos - prev_pos;
+	float4 screen_point = float4(max(outputUV, ViewportRect), depthColor, 1.0f);
+	float4 curr_pos = mul(curr_screen_to_world, screen_point);
+	
+	float4 prev_pos = mul(prev_screen_to_world, screen_point);
+	float4 world_diff = curr_pos - prev_pos;
+	
+	float2 screen_diff = mul(world_to_screen, world_diff).xy * 0.03f;
 
 	// Try to nullify motion if the camera isn't moving
 	float threshold = 2.0f;
 	screen_diff.x *= screen_diff.x > threshold;
 	screen_diff.y *= screen_diff.y > threshold;
 	
-	if (length(Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV + velocityColor.xy, 0).rg) == 0) {
+	if (length(Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV + velocityColor.rg, 0).rg) == 0) {
 		// The target pixel has no motion, nullify. Without this, there's a terrible jittering at higher values
 		// velocityColor = 0;
 	}
-		
-	if (!has_motion) {
-		// Only apply the less accurate guess when we don't have a real velocity vector
-		velocityColor.rg += screen_diff * depthColor;
+
+	if (velocityColor.r > 0) {
+        velocityColor.r -= 0.5f;
+	}
+	if (velocityColor.g > 0) {
+		velocityColor.g -= 0.5f;
+	}
+	if (velocityColor.g < 0 || velocityColor.r > 0) {
+		velocityColor.rg *= 0.01f;
 	}
 
+	if (length(velocityColor.rg) > 0 && length(screen_diff) == 0) {
+        screen_diff.x = -velocityColor.r;	
+        screen_diff.y = velocityColor.g;
+        screen_diff *= 0.1f;
+	}
+	// screen_diff *= depthColor;
+	
 	// Visualize motion vectors on top of the normal frame
-	// OriginalColor.rg += 0.1 * velocityColor.rg;
+	// OriginalColor.rb += 0.1 * screen_diff;
 
 	// Visualize motion vectors in output color
-	// OriginalColor = float4(velocityColor.rg - 0.5f, 0, 0);
+	// OriginalColor.rgb = float3(screen_diff, 0.0f);
 
 	// Write output
-	float2 motionUV = outputUV + (1.0f * (velocityColor.rg));
-	float2 inv_motionUV = outputUV - (1.0f * (velocityColor.rg));
+	float2 motionUV = outputUV + screen_diff;
+	float2 inv_motionUV = outputUV.xy - screen_diff;
 
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
 	historyBuffer[outputUV] = OriginalColor;
-	historyBuffer[motionUV] = OriginalColor;
-	// historyBuffer[outputUV] = historyBuffer[inv_motionUV];
+	if (motionUV.x != outputUV.x || motionUV.y != outputUV.y) {
+		historyBuffer[inv_motionUV] = historyBuffer[motionUV];
+		historyBuffer[outputUV] = historyBuffer[motionUV];
+	}
 }
