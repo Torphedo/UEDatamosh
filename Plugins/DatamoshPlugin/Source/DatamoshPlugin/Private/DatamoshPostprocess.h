@@ -61,13 +61,12 @@ public:
 			SHADER_PARAMETER(FVector2f, ViewportInvSize)
 			SHADER_PARAMETER(FVector2f, SceneColorUVScale)
 	
-			SHADER_PARAMETER(FMatrix44f, prev_screen_to_world)
 			SHADER_PARAMETER(FMatrix44f, curr_screen_to_world)
-			SHADER_PARAMETER(FMatrix44f, world_to_screen)
+			SHADER_PARAMETER(FMatrix44f, prev_world_to_screen)
 
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OriginalSceneColor)
 			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Velocity)
-			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, Depth)
+			SHADER_PARAMETER_RDG_TEXTURE(Texture2D, DepthTex)
 			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, historyBuffer)
 		END_SHADER_PARAMETER_STRUCT()
 

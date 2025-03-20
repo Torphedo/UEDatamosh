@@ -14,7 +14,7 @@
 // SceneColor texture
 Texture2D OriginalSceneColor;
 Texture2D Velocity;
-Texture2D Depth;
+Texture2D DepthTex;
 
 // Viewport size
 uint4 ViewportRect;
@@ -26,12 +26,30 @@ float2 ViewportInvSize;
 float2 SceneColorUVScale;
 
 // TODO: Document these
-float4x4 prev_screen_to_world;
 float4x4 curr_screen_to_world;
-float4x4 world_to_screen;
+float4x4 prev_world_to_screen;
 
 // Output
 RWTexture2D<float4> historyBuffer;
+
+float2 viewport_velocity(float2 viewportUV, float depth, float4x4 inv_view_proj, float4x4 prev_view_proj) {
+	// Velocity calculation from GPU Gems 3 motion blur velocity:
+	// https://developer.nvidia.com/gpugems/gpugems3/part-iv-image-effects/chapter-27-motion-blur-post-processing-effect
+	
+	// Map back to clip space
+	const float4 clip_coord = float4(viewportUV.x * 2 - 1, (1 - viewportUV.y) * 2 - 1, depth, 1.0f);
+
+	// Transform to world space
+	float4 world_coord = mul(clip_coord, inv_view_proj);
+	world_coord /= world_coord.w; // Perspective division (?)
+
+	// Transform back to clip space using last frame's view-projection matrix
+	float4 prev_clip_coord = mul(world_coord, prev_view_proj);
+	prev_clip_coord /= prev_clip_coord.w;
+
+	// Take distance, and undo our multiplication from earlier
+	return (clip_coord - prev_clip_coord) / 2.0f;
+}
 
 // Compute Shader code
 [numthreads(GROUP_BORDER_SIZE, GROUP_BORDER_SIZE, 1)]
@@ -55,22 +73,17 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// Sample textures
 	float4 OriginalColor = OriginalSceneColor.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 	float4 velocityColor = Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
-	float depthColor = Depth.SampleLevel(GlobalPointClampedSampler, sampleUV, 0).r; // Only red channel matters
+	float depthColor = DepthTex.SampleLevel(GlobalPointClampedSampler, sampleUV, 0);
 
 	// Calculate screen-space object movement
-	// TODO: Historical depth buffer for more accuracy?
-	float4 screen_point = float4(max(outputUV, ViewportRect), depthColor, 1.0f);
-	float4 curr_pos = mul(curr_screen_to_world, screen_point);
+	float2 screen_diff = viewport_velocity(sampleUV, depthColor, curr_screen_to_world, prev_world_to_screen);
+	// Leave the skybox alone
+	if (depthColor < 0.00001f) {
+		screen_diff = 0;	
+	}
 	
-	float4 prev_pos = mul(prev_screen_to_world, screen_point);
-	float4 world_diff = curr_pos - prev_pos;
-	
-	float2 screen_diff = mul(world_to_screen, world_diff).xy * 0.03f;
-
-	// Try to nullify motion if the camera isn't moving
-	float threshold = 2.0f;
-	screen_diff.x *= screen_diff.x > threshold;
-	screen_diff.y *= screen_diff.y > threshold;
+	// Only use our velocity if the engine doesn't provide one
+	screen_diff *= length(velocityColor) == 0;
 	
 	if (length(Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV + velocityColor.rg, 0).rg) == 0) {
 		// The target pixel has no motion, nullify. Without this, there's a terrible jittering at higher values
@@ -90,16 +103,15 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	if (length(velocityColor.rg) > 0 && length(screen_diff) == 0) {
         screen_diff.x = -velocityColor.r;	
         screen_diff.y = velocityColor.g;
-        screen_diff *= 0.1f;
+        // screen_diff *= 0.1f;
 	}
-	// screen_diff *= depthColor;
 	
 	// Visualize motion vectors on top of the normal frame
 	// OriginalColor.rb += 0.1 * screen_diff;
 
 	// Visualize motion vectors in output color
 	// OriginalColor.rgb = float3(screen_diff, 0.0f);
-
+	
 	// Write output
 	float2 motionUV = outputUV + screen_diff;
 	float2 inv_motionUV = outputUV.xy - screen_diff;
