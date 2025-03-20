@@ -84,37 +84,20 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	
 	// Only use our velocity if the engine doesn't provide one
 	screen_diff *= length(velocityColor) == 0;
-	
-	if (length(Velocity.SampleLevel(GlobalPointClampedSampler, sampleUV + velocityColor.rg, 0).rg) == 0) {
-		// The target pixel has no motion, nullify. Without this, there's a terrible jittering at higher values
-		// velocityColor = 0;
-	}
 
-	if (velocityColor.r > 0) {
-        velocityColor.r -= 0.5f;
-	}
-	if (velocityColor.g > 0) {
-		velocityColor.g -= 0.5f;
-	}
-	if (velocityColor.g < 0 || velocityColor.r > 0) {
-		velocityColor.rg *= 0.01f;
-	}
+	velocityColor.rg *= SceneColorUVScale;
 
 	if (length(velocityColor.rg) > 0 && length(screen_diff) == 0) {
-        screen_diff.x = -velocityColor.r;	
+        screen_diff.x = -velocityColor.r;
         screen_diff.y = velocityColor.g;
-        // screen_diff *= 0.1f;
 	}
 	
-	// Visualize motion vectors on top of the normal frame
-	// OriginalColor.rb += 0.1 * screen_diff;
-
 	// Visualize motion vectors in output color
-	// OriginalColor.rgb = float3(screen_diff, 0.0f);
+	// OriginalColor.rgb = float3(screen_diff, 0.0f); screen_diff = 0;
 	
 	// Write output
 	float2 motionUV = outputUV + screen_diff;
-	float2 inv_motionUV = outputUV.xy - screen_diff;
+	float2 inv_motionUV = outputUV - screen_diff;
 
 	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
 	// distorts.
@@ -123,4 +106,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 		historyBuffer[inv_motionUV] = historyBuffer[motionUV];
 		historyBuffer[outputUV] = historyBuffer[motionUV];
 	}
+	
+	// Visualize motion vectors on top of the normal frame
+	historyBuffer[outputUV] = OriginalColor + 0.5 * float4(screen_diff, 0, 1);
 }
