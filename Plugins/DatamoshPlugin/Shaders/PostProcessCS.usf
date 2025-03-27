@@ -88,7 +88,7 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	velocityColor.rg *= SceneColorUVScale;
 
 	if (length(velocityColor.rg) > 0 && length(screen_diff) == 0) {
-        screen_diff.x = -velocityColor.r;
+        screen_diff.x = velocityColor.r;
         screen_diff.y = velocityColor.g;
 	}
 	
@@ -108,5 +108,5 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	}
 	
 	// Visualize motion vectors on top of the normal frame
-	historyBuffer[outputUV] = OriginalColor + 0.5 * float4(screen_diff, 0, 1);
+	// historyBuffer[outputUV] = OriginalColor + 0.5 * float4(screen_diff, 0, 1);
 }

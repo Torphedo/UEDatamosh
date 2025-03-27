@@ -51,8 +51,6 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 	// into a world space position. Then we can find the difference to find out the screen space movement in the last
 	// frame.
 	
-	// Create a matrix to do the same transform as SceneView.PixelToWorld(), so we can upload it to the GPU and use it
-	// on each pixel position.
 	static FMatrix44f prev_world_to_screen = FMatrix44f().Identity;
 	FMatrix44f cur_screen_to_world = FMatrix44f(SceneView.ViewMatrices.GetInvViewProjectionMatrix());
 	
