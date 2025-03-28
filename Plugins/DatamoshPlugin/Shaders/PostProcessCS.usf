@@ -102,11 +102,11 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	// Calculate color-space motion vector
 	float4 color_motion = OriginalColor - historyBuffer[outputUV];
 	
-	// Copy interpolated color to history
-	historyBuffer[outputUV] += color_motion;
-
-	// Distort history by scene motion
 	if (motionUV.x != outputUV.x || motionUV.y != outputUV.y) {
+		// Do color interpolation
+		historyBuffer[outputUV] += color_motion;
+
+		// Distort history by scene motion
 		historyBuffer[inv_motionUV] = historyBuffer[motionUV];
 		historyBuffer[outputUV] = historyBuffer[motionUV];
 	}
