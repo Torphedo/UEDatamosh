@@ -7,12 +7,17 @@
 
 IMPLEMENT_GLOBAL_SHADER(FCustomShader, "/Plugins/DatamoshPlugin/PostProcessCS.usf", "MainCS", SF_Compute);
 
-TAutoConsoleVariable<bool> CVarShaderOn(TEXT("r.DoDatamosh"),
+TAutoConsoleVariable CVarShaderOn(TEXT("r.DoDatamosh"),
 	false,
 	TEXT("Toggles Datamoshing\n"),
 	ECVF_RenderThreadSafe);
 
 TAutoConsoleVariable CVarFreezeFrame(TEXT("r.DatamoshFreeze"),
+	false,
+	TEXT(""),
+	ECVF_RenderThreadSafe);
+
+TAutoConsoleVariable CVarColorInterpolate(TEXT("r.FrameInterpolate.doColor"),
 	false,
 	TEXT(""),
 	ECVF_RenderThreadSafe);
@@ -108,16 +113,14 @@ FScreenPassTexture FCustomSceneViewExtension::CustomPostProcessing(FRDGBuilder& 
 		FRDGTextureRef depthTex = Inputs.SceneTextures.SceneTextures->GetContents()->SceneDepthTexture;
 
 		if (CVarFreezeFrame.GetValueOnRenderThread() && historyBuffer != nullptr) {
-			// While frozen, keep the old texture around and don't let the shader use the current frame
+			// While frozen, keep the old texture around
 			history = GraphBuilder.RegisterExternalTexture(historyBuffer);
-			PassParameters->OriginalSceneColor = history;
 		} else {
 			// While we're unfrozen, keep history buffer synced with framebuffer
 			history = GraphBuilder.CreateTexture(OutputDesc, TEXT("Datamosh Historical Framebuffer"), ERDGTextureFlags::MultiFrame);
 			AddCopyTexturePass(GraphBuilder, SceneColor.Texture, history);
-			
-			PassParameters->OriginalSceneColor = SceneColor.Texture;
 		}
+		PassParameters->OriginalSceneColor = CVarColorInterpolate.GetValueOnRenderThread() ? SceneColor.Texture : history;
 		
 		// Create UAV from target texture
         PassParameters->historyBuffer = GraphBuilder.CreateUAV(history);

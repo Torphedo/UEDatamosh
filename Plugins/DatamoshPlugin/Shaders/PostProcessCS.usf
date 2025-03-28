@@ -94,14 +94,18 @@ void MainCS(uint2 DispatchThreadId : SV_DispatchThreadID) {
 	
 	// Visualize motion vectors in output color
 	// OriginalColor.rgb = float3(screen_diff, 0.0f); screen_diff = 0;
-	
+
 	// Write output
 	float2 motionUV = outputUV + screen_diff;
 	float2 inv_motionUV = outputUV - screen_diff;
 
-	// Copy current frame to history, then distort. If the CPU set the history buffer as the scene color, this only
-	// distorts.
-	historyBuffer[outputUV] = OriginalColor;
+	// Calculate color-space motion vector
+	float4 color_motion = OriginalColor - historyBuffer[outputUV];
+	
+	// Copy interpolated color to history
+	historyBuffer[outputUV] += color_motion;
+
+	// Distort history by scene motion
 	if (motionUV.x != outputUV.x || motionUV.y != outputUV.y) {
 		historyBuffer[inv_motionUV] = historyBuffer[motionUV];
 		historyBuffer[outputUV] = historyBuffer[motionUV];
