@@ -7,24 +7,24 @@
 
 IMPLEMENT_GLOBAL_SHADER(FCustomShader, "/Plugins/DatamoshPlugin/PostProcessCS.usf", "MainCS", SF_Compute);
 
-TAutoConsoleVariable CVarShaderOn(TEXT("r.DoDatamosh"),
+TAutoConsoleVariable CVarShaderOn(TEXT("r.FrameInterpolate.enable"),
 	false,
-	TEXT("Toggles Datamoshing\n"),
+	TEXT("Toggles frame interpolation\n"),
 	ECVF_RenderThreadSafe);
 
-TAutoConsoleVariable CVarFreezeFrame(TEXT("r.DatamoshFreeze"),
+TAutoConsoleVariable CVarFreezeFrame(TEXT("r.FrameInterpolate.freeze"),
 	false,
-	TEXT(""),
+	TEXT("Whether the framebuffer is currently frozen (and being generated via interpolation)"),
 	ECVF_RenderThreadSafe);
 
 TAutoConsoleVariable CVarColorInterpolate(TEXT("r.FrameInterpolate.doColor"),
 	false,
-	TEXT(""),
+	TEXT("Whether to use color data from the current non-interpolated, non-frozen framebuffer for interpolation. Hugely improves quality but destroys any potential rendering benefit."),
 	ECVF_RenderThreadSafe);
 
-TAutoConsoleVariable CVarFreezeInterval(TEXT("r.DatamoshFreezeInterval"),
+TAutoConsoleVariable CVarFreezeInterval(TEXT("r.FrameInterpolate.interval"),
 	1,
-	TEXT(""),
+	TEXT("How many frames to interpolate over (only used for blueprint data storage)"),
 	ECVF_RenderThreadSafe);
 
 
