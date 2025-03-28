@@ -22,12 +22,6 @@ TAutoConsoleVariable CVarColorInterpolate(TEXT("r.FrameInterpolate.doColor"),
 	TEXT("Whether to use color data from the current non-interpolated, non-frozen framebuffer for interpolation. Hugely improves quality but destroys any potential rendering benefit."),
 	ECVF_RenderThreadSafe);
 
-TAutoConsoleVariable CVarFreezeInterval(TEXT("r.FrameInterpolate.interval"),
-	1,
-	TEXT("How many frames to interpolate over (only used for blueprint data storage)"),
-	ECVF_RenderThreadSafe);
-
-
 FCustomSceneViewExtension::FCustomSceneViewExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {
 	UE_LOG(LogTemp, Log, TEXT("Datamosh Plugin: registered SceneViewExtension with renderer"));
 }
